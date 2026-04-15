@@ -52,35 +52,35 @@ function getPlayer(soundPath) {
   return null;
 }
 
-function ensureDefaultSound(customDir) {
+function ensureDefaultSound(customDir, eventName = "success") {
   const configDir = getConfigDir(customDir);
-  const soundPath = getDefaultSoundPath(customDir);
+  const soundPath = getDefaultSoundPath(customDir, eventName);
   ensureDir(configDir);
 
   if (!fs.existsSync(soundPath)) {
-    fs.writeFileSync(soundPath, createWaveBuffer());
+    fs.writeFileSync(soundPath, createWaveBuffer({ preset: eventName }));
   }
 
   return soundPath;
 }
 
-function ensureUsableSound(customDir) {
-  const soundPath = resolveSoundPath(customDir);
+function ensureUsableSound(customDir, eventName = "success") {
+  const soundPath = resolveSoundPath(customDir, eventName);
 
   if (fs.existsSync(soundPath)) {
     return soundPath;
   }
 
-  if (path.resolve(soundPath) === path.resolve(getDefaultSoundPath(customDir))) {
-    return ensureDefaultSound(customDir);
+  if (path.resolve(soundPath) === path.resolve(getDefaultSoundPath(customDir, eventName))) {
+    return ensureDefaultSound(customDir, eventName);
   }
 
-  throw new Error(`Configured sound file does not exist: ${soundPath}`);
+  throw new Error(`Configured ${eventName} sound file does not exist: ${soundPath}`);
 }
 
 function playSound(options = {}) {
-  const { customDir, soundPath, background = false } = options;
-  const resolvedSound = soundPath ? path.resolve(soundPath) : ensureUsableSound(customDir);
+  const { customDir, soundPath, background = false, eventName = "success" } = options;
+  const resolvedSound = soundPath ? path.resolve(soundPath) : ensureUsableSound(customDir, eventName);
   const player = getPlayer(resolvedSound);
 
   if (!player) {

@@ -183,11 +183,7 @@ function isGitHubRemote(remoteUrl) {
   return host === "github.com";
 }
 
-function shouldTriggerAfterGit(exitCode, shellCwd, args) {
-  if (Number(exitCode) !== 0) {
-    return null;
-  }
-
+function getPushEventAfterGit(exitCode, shellCwd, args) {
   const command = extractCommandContext(args, shellCwd);
   if (command.subcommand !== "push") {
     return null;
@@ -203,13 +199,25 @@ function shouldTriggerAfterGit(exitCode, shellCwd, args) {
 
   return {
     cwd: command.cwd,
+    exitCode: Number(exitCode),
+    outcome: Number(exitCode) === 0 ? "success" : "failure",
     remoteArg,
     remoteUrl
   };
 }
 
+function shouldTriggerAfterGit(exitCode, shellCwd, args) {
+  const pushEvent = getPushEventAfterGit(exitCode, shellCwd, args);
+  if (!pushEvent || pushEvent.outcome !== "success") {
+    return null;
+  }
+
+  return pushEvent;
+}
+
 module.exports = {
   extractCommandContext,
+  getPushEventAfterGit,
   inferRemoteUrl,
   isGitHubRemote,
   normalizeGitHost,

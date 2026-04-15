@@ -2,8 +2,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const { getConfigDir, getConfigPath, resolveSoundPath, setSoundPath } = require("./config");
-const { shouldTriggerAfterGit } = require("./git");
-const { createSnippet, detectShell, getRcFile, installShellIntegration, uninstallShellIntegration } = require("./shell");
+const { getPushEventAfterGit } = require("./git");
+const { detectShell, getRcFile, installShellIntegration, uninstallShellIntegration } = require("./shell");
 const { commandExists, ensureDefaultSound, getPlayer, playSound } = require("./sound");
 
 function printHelp() {
@@ -12,12 +12,23 @@ function printHelp() {
 Commands:
   install [--shell zsh|bash|fish] [--rc-file PATH] [--config-dir PATH]
   uninstall [--shell zsh|bash|fish] [--rc-file PATH]
-  play [--sound PATH] [--config-dir PATH]
-  set-sound <PATH> [--config-dir PATH]
+  play [--event success|failure] [--sound PATH] [--config-dir PATH]
+  set-sound <PATH> [--event success|failure] [--config-dir PATH]
+  set-success-sound <PATH> [--config-dir PATH]
+  set-failure-sound <PATH> [--config-dir PATH]
   doctor [--shell zsh|bash|fish] [--rc-file PATH] [--config-dir PATH]
 
 Internal:
   __after-git <exitCode> <cwd> <git args...>`);
+}
+
+function resolveEventFlag(flags, fallbackEvent = "success") {
+  const eventName = flags.event || fallbackEvent;
+  if (eventName !== "success" && eventName !== "failure") {
+    throw new Error(`Unsupported event "${eventName}". Use "success" or "failure".`);
+  }
+
+  return eventName;
 }
 
 function parseFlags(argv) {
@@ -50,7 +61,8 @@ function parseFlags(argv) {
 }
 
 async function handleInstall(flags) {
-  ensureDefaultSound(flags["config-dir"]);
+  const successSoundPath = ensureDefaultSound(flags["config-dir"], "success");
+  const failureSoundPath = ensureDefaultSound(flags["config-dir"], "failure");
   const shellName = detectShell(flags.shell);
   const executablePath = fs.realpathSync(process.argv[1]);
   const rcFile = installShellIntegration({
@@ -62,7 +74,8 @@ async function handleInstall(flags) {
   console.log(`Installed pushproducer for ${shellName}.`);
   console.log(`Shell config: ${rcFile}`);
   console.log(`Config dir: ${getConfigDir(flags["config-dir"])}`);
-  console.log(`Default sound: ${resolveSoundPath(flags["config-dir"])}`);
+  console.log(`Default success sound: ${successSoundPath}`);
+  console.log(`Default failure sound: ${failureSoundPath}`);
   console.log(`Restart your shell or run: source ${rcFile}`);
 }
 
@@ -76,14 +89,16 @@ async function handleUninstall(flags) {
 }
 
 async function handlePlay(flags) {
+  const eventName = resolveEventFlag(flags);
   await playSound({
     customDir: flags["config-dir"],
+    eventName,
     soundPath: flags.sound
   });
-  console.log("Played pushproducer tag.");
+  console.log(`Played pushproducer ${eventName} tag.`);
 }
 
-async function handleSetSound(args, flags) {
+async function handleSetSound(args, flags, fallbackEvent = "success") {
   const soundPath = args[0];
   if (!soundPath) {
     throw new Error("Missing sound path. Usage: pushproducer set-sound <PATH>");
@@ -94,8 +109,9 @@ async function handleSetSound(args, flags) {
     throw new Error(`Sound file does not exist: ${resolved}`);
   }
 
-  setSoundPath(resolved, flags["config-dir"]);
-  console.log(`Custom sound set to ${resolved}`);
+  const eventName = resolveEventFlag(flags, fallbackEvent);
+  setSoundPath(resolved, flags["config-dir"], eventName);
+  console.log(`Custom ${eventName} sound set to ${resolved}`);
 }
 
 async function handleDoctor(flags) {
@@ -103,15 +119,18 @@ async function handleDoctor(flags) {
   const rcFile = getRcFile(shellName, flags["rc-file"]);
   const configDir = getConfigDir(flags["config-dir"]);
   const configPath = getConfigPath(flags["config-dir"]);
-  const soundPath = resolveSoundPath(flags["config-dir"]);
-  const player = getPlayer(soundPath);
+  const successSoundPath = resolveSoundPath(flags["config-dir"], "success");
+  const failureSoundPath = resolveSoundPath(flags["config-dir"], "failure");
+  const player = getPlayer(successSoundPath) || getPlayer(failureSoundPath);
 
   console.log(`shell: ${shellName}`);
   console.log(`rcFile: ${rcFile}`);
   console.log(`configDir: ${configDir}`);
   console.log(`configPath: ${configPath}`);
-  console.log(`soundPath: ${soundPath}`);
-  console.log(`soundExists: ${fs.existsSync(soundPath)}`);
+  console.log(`successSoundPath: ${successSoundPath}`);
+  console.log(`successSoundExists: ${fs.existsSync(successSoundPath)}`);
+  console.log(`failureSoundPath: ${failureSoundPath}`);
+  console.log(`failureSoundExists: ${fs.existsSync(failureSoundPath)}`);
   console.log(`audioPlayer: ${player ? player.command : "missing"}`);
   console.log(`afplayAvailable: ${commandExists("afplay")}`);
 }
@@ -120,14 +139,15 @@ async function handleAfterGit(args) {
   const exitCode = args[0];
   const cwd = args[1];
   const gitArgs = args.slice(2);
-  const trigger = shouldTriggerAfterGit(exitCode, cwd, gitArgs);
+  const pushEvent = getPushEventAfterGit(exitCode, cwd, gitArgs);
 
-  if (!trigger) {
+  if (!pushEvent) {
     return;
   }
 
   await playSound({
-    background: true
+    background: true,
+    eventName: pushEvent.outcome
   });
 }
 
@@ -157,6 +177,16 @@ async function main(argv) {
 
   if (command === "set-sound") {
     await handleSetSound(args.slice(1), flags);
+    return;
+  }
+
+  if (command === "set-success-sound") {
+    await handleSetSound(args.slice(1), { ...flags, event: "success" }, "success");
+    return;
+  }
+
+  if (command === "set-failure-sound") {
+    await handleSetSound(args.slice(1), { ...flags, event: "failure" }, "failure");
     return;
   }
 

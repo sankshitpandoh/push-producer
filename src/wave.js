@@ -13,10 +13,12 @@ function writeString(buffer, offset, value) {
 }
 
 function createWaveBuffer({
+  preset = "success",
   durationSeconds = 0.82,
   sampleRate = 44100,
   amplitude = 0.28
 } = {}) {
+  const wavePreset = getPreset(preset);
   const totalSamples = Math.floor(durationSeconds * sampleRate);
   const pcmData = Buffer.alloc(totalSamples * 2);
 
@@ -28,16 +30,14 @@ function createWaveBuffer({
 
     let sample = 0;
 
-    if (time >= 0.04 && time < 0.29) {
-      sample += Math.sin(2 * Math.PI * 523.25 * (time - 0.04)) * 0.8;
+    for (const note of wavePreset.leadNotes) {
+      if (time >= note.start && time < note.end) {
+        sample += Math.sin(2 * Math.PI * note.frequency * (time - note.start)) * note.volume;
+      }
     }
 
-    if (time >= 0.34 && time < 0.62) {
-      sample += Math.sin(2 * Math.PI * 659.25 * (time - 0.34)) * 0.8;
-    }
-
-    if (time >= 0.12 && time < 0.62) {
-      sample += Math.sin(2 * Math.PI * 130.81 * time) * 0.28;
+    if (time >= wavePreset.bassNote.start && time < wavePreset.bassNote.end) {
+      sample += Math.sin(2 * Math.PI * wavePreset.bassNote.frequency * time) * wavePreset.bassNote.volume;
     }
 
     const output = clampSample(sample * envelope * amplitude);
@@ -60,6 +60,36 @@ function createWaveBuffer({
   header.writeUInt32LE(pcmData.length, 40);
 
   return Buffer.concat([header, pcmData]);
+}
+
+function getPreset(preset) {
+  if (preset === "failure") {
+    return {
+      leadNotes: [
+        { start: 0.03, end: 0.23, frequency: 392.0, volume: 0.78 },
+        { start: 0.24, end: 0.55, frequency: 293.66, volume: 0.8 }
+      ],
+      bassNote: {
+        start: 0.08,
+        end: 0.55,
+        frequency: 98.0,
+        volume: 0.3
+      }
+    };
+  }
+
+  return {
+    leadNotes: [
+      { start: 0.04, end: 0.29, frequency: 523.25, volume: 0.8 },
+      { start: 0.34, end: 0.62, frequency: 659.25, volume: 0.8 }
+    ],
+    bassNote: {
+      start: 0.12,
+      end: 0.62,
+      frequency: 130.81,
+      volume: 0.28
+    }
+  };
 }
 
 module.exports = {

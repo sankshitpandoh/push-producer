@@ -4,7 +4,10 @@ const path = require("node:path");
 
 const CONFIG_DIR_NAME = ".pushproducer";
 const CONFIG_FILE_NAME = "config.json";
-const DEFAULT_SOUND_NAME = "default-tag.wav";
+const DEFAULT_SOUND_NAMES = {
+  success: "default-tag.wav",
+  failure: "default-fail-tag.wav"
+};
 
 function getHomeDir() {
   return os.homedir();
@@ -18,8 +21,17 @@ function getConfigPath(customDir) {
   return path.join(getConfigDir(customDir), CONFIG_FILE_NAME);
 }
 
-function getDefaultSoundPath(customDir) {
-  return path.join(getConfigDir(customDir), DEFAULT_SOUND_NAME);
+function normalizeEventName(eventName) {
+  return eventName === "failure" ? "failure" : "success";
+}
+
+function getConfigSoundKey(eventName) {
+  return normalizeEventName(eventName) === "failure" ? "failureSoundPath" : "successSoundPath";
+}
+
+function getDefaultSoundPath(customDir, eventName = "success") {
+  const normalizedEvent = normalizeEventName(eventName);
+  return path.join(getConfigDir(customDir), DEFAULT_SOUND_NAMES[normalizedEvent]);
 }
 
 function ensureDir(dirPath) {
@@ -46,14 +58,30 @@ function writeConfig(config, customDir) {
   fs.writeFileSync(getConfigPath(customDir), `${JSON.stringify(config, null, 2)}\n`, "utf8");
 }
 
-function resolveSoundPath(customDir) {
+function resolveSoundPath(customDir, eventName = "success") {
   const config = readConfig(customDir);
-  return config.soundPath ? path.resolve(config.soundPath) : getDefaultSoundPath(customDir);
+  const normalizedEvent = normalizeEventName(eventName);
+
+  if (normalizedEvent === "success") {
+    const successPath = config.successSoundPath || config.soundPath;
+    return successPath ? path.resolve(successPath) : getDefaultSoundPath(customDir, normalizedEvent);
+  }
+
+  return config.failureSoundPath
+    ? path.resolve(config.failureSoundPath)
+    : getDefaultSoundPath(customDir, normalizedEvent);
 }
 
-function setSoundPath(soundPath, customDir) {
+function setSoundPath(soundPath, customDir, eventName = "success") {
   const config = readConfig(customDir);
-  config.soundPath = path.resolve(soundPath);
+  const normalizedEvent = normalizeEventName(eventName);
+  const resolvedSoundPath = path.resolve(soundPath);
+
+  config[getConfigSoundKey(normalizedEvent)] = resolvedSoundPath;
+  if (normalizedEvent === "success") {
+    config.soundPath = resolvedSoundPath;
+  }
+
   writeConfig(config, customDir);
 }
 
@@ -62,6 +90,7 @@ module.exports = {
   getConfigDir,
   getConfigPath,
   getDefaultSoundPath,
+  normalizeEventName,
   readConfig,
   resolveSoundPath,
   setSoundPath,

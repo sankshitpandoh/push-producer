@@ -7,6 +7,7 @@ const { execFileSync } = require("node:child_process");
 
 const {
   extractCommandContext,
+  getPushEventAfterGit,
   isGitHubRemote,
   normalizeGitHost,
   resolvePushRemoteArg,
@@ -57,4 +58,18 @@ test("shouldTriggerAfterGit skips non-github remotes", () => {
 
   const trigger = shouldTriggerAfterGit(0, repoDir, ["push", "origin"]);
   assert.equal(trigger, null);
+});
+
+test("getPushEventAfterGit returns failure for failed github push", () => {
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), "pushproducer-repo-"));
+  execFileSync("git", ["init"], { cwd: repoDir, stdio: "ignore" });
+  execFileSync("git", ["remote", "add", "origin", "git@github.com:openai/demo.git"], {
+    cwd: repoDir,
+    stdio: "ignore"
+  });
+
+  const pushEvent = getPushEventAfterGit(1, repoDir, ["push", "origin"]);
+  assert.ok(pushEvent);
+  assert.equal(pushEvent.outcome, "failure");
+  assert.equal(pushEvent.remoteUrl, "git@github.com:openai/demo.git");
 });
