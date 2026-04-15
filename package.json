@@ -1,0 +1,24 @@
+{
+  "name": "pushproducer",
+  "version": "0.1.0",
+  "description": "Play a replaceable audio tag after successful git pushes to GitHub from terminal shells.",
+  "author": "Sankshit Pandoh",
+  "bin": {
+    "pushproducer": "./bin/pushproducer.js"
+  },
+  "type": "commonjs",
+  "scripts": {
+    "test": "node --test"
+  },
+  "keywords": [
+    "cli",
+    "git",
+    "github",
+    "audio",
+    "terminal"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}
